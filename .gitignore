@@ -4,3 +4,5 @@ dist
 .env.local
 .superpowers
 coverage
+docs/
+.claude/
