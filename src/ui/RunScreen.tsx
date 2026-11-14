@@ -6,7 +6,7 @@ import { parseKg } from '../domain/progression';
 import { todayLocal } from '../domain/dates';
 import { useEngine, useRows } from '../data/store';
 
-const TYPE_LABEL: Record<RunLog['type'], string> = { test: 'Test', ripetute: 'Ripetute', ritmo: 'Ritmo', lungo: 'Lungo' };
+const TYPE_LABEL: Record<RunLog['type'], string> = { test: 'Test', ripetute: 'Ripetute', ritmo: 'Ritmo', lungo: 'Lungo', corsa: 'Corsa' };
 
 export function RunScreen({ today = todayLocal() }: { today?: string }) {
   const engine = useEngine();

@@ -10,10 +10,12 @@ export interface BodyLog {
   date: string; weightKg: number | null; waistCm: number | null; chestCm: number | null;
   armCm: number | null; thighCm: number | null; updatedAt: string;
 }
-export type RunType = 'test' | 'ripetute' | 'ritmo' | 'lungo';
+export type RunType = 'test' | 'ripetute' | 'ritmo' | 'lungo' | 'corsa'; // da Strava in poi solo 'corsa'
+export type Feeling = 'facile' | 'giusta' | 'dura';
 export interface RunLog {
   id: string; date: string; type: RunType; distanceKm: number; durationS: number;
   source: 'manual' | 'strava'; externalId: string | null; updatedAt: string;
+  startTime?: string | null; feeling?: Feeling | null; best5kS?: number | null; best10kS?: number | null; hidden?: boolean;
 }
 export interface Baseline {
   date: string; weightKg: number | null; waistCm: number | null; chestCm: number | null;

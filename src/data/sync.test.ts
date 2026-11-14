@@ -138,3 +138,12 @@ test('il profilo è pronto solo dopo averlo scaricato', async () => {
   await engine.pull();
   expect(engine.isReady('profile')).toBe(true);
 });
+
+test('conversione delle colonne Strava di run_logs', () => {
+  const r = fromRemote('run_logs', {
+    user_id: 'u1', id: 'strava-1', date: '2026-11-10', type: 'corsa', distance_km: '5.01', duration_s: 1810,
+    source: 'strava', external_id: '1', best_5k_s: '1660', best_10k_s: null, feeling: 'giusta', hidden: false,
+    start_time: '2026-11-10T07:00:00+00:00', updated_at: '2026-11-10T08:00:00+00:00',
+  });
+  expect(r).toMatchObject({ distanceKm: 5.01, best5kS: 1660, best10kS: null, feeling: 'giusta', hidden: false, startTime: '2026-11-10T07:00:00.000Z' });
+});

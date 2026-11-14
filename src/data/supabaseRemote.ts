@@ -13,10 +13,16 @@ const CONFLICT: Record<TableName, string> = {
 const PAGE = 1000; // il limite di righe predefinito di Supabase
 
 /** Colonne numeric: PostgREST può restituirle come stringhe. */
-const NUMERIC = new Set(['kg', 'startKg', 'weightKg', 'waistCm', 'chestCm', 'armCm', 'thighCm', 'distanceKm', 'durationS']);
+const NUMERIC = new Set(['kg', 'startKg', 'weightKg', 'waistCm', 'chestCm', 'armCm', 'thighCm', 'distanceKm', 'durationS', 'best5kS', 'best10kS']);
+/** Date e ore: PostgREST le restituisce con +00:00, l'app le confronta come ISO con Z. */
+const TIMESTAMPS = new Set(['updatedAt', 'syncedAt', 'startTime']);
 
-const snake = (k: string) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
-const camel = (k: string) => k.replace(/_([a-z])/g, (_m, c: string) => c.toUpperCase());
+/** Nomi con cifre che la conversione automatica non sa trattare. */
+const SPECIAL: Record<string, string> = { best5kS: 'best_5k_s', best10kS: 'best_10k_s' };
+const SPECIAL_BACK = Object.fromEntries(Object.entries(SPECIAL).map(([a, b]) => [b, a]));
+
+const snake = (k: string) => SPECIAL[k] ?? k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+const camel = (k: string) => SPECIAL_BACK[k] ?? k.replace(/_([a-z])/g, (_m, c: string) => c.toUpperCase());
 
 /** Conversione superficiale: il contenuto di baseline (jsonb) resta com'è. */
 export function toRemote(_table: TableName, row: object): Record<string, unknown> {
@@ -28,7 +34,7 @@ export function fromRemote(_table: TableName, row: Record<string, unknown>): Rec
   for (const [k, v] of Object.entries(row)) {
     if (k === 'user_id') continue;
     const key = camel(k);
-    if (key === 'updatedAt' || key === 'syncedAt') out[key] = new Date(String(v)).toISOString();
+    if (TIMESTAMPS.has(key)) out[key] = v == null ? null : new Date(String(v)).toISOString();
     else if (NUMERIC.has(key) && v != null) out[key] = Number(v);
     else out[key] = v;
   }
