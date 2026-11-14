@@ -5,9 +5,9 @@ import { RunScreen } from './RunScreen';
 import { ProgressScreen } from './ProgressScreen';
 import type { RunLog } from '../domain/types';
 
-test('senza corse propone il test sui 5 km', async () => {
+test('senza corse propone 5 km', async () => {
   await renderWithEngine(<RunScreen today="2026-11-20" />);
-  expect(screen.getByRole('heading', { name: 'Test 5 km' })).toBeInTheDocument();
+  expect(screen.getByText(/5 km, passo tranquillo/)).toBeInTheDocument();
 });
 
 test('salva la corsa fatta', async () => {
@@ -18,7 +18,7 @@ test('salva la corsa fatta', async () => {
   await userEvent.type(dist, '5');
   await userEvent.type(screen.getByLabelText('Tempo'), '27:40');
   await userEvent.click(screen.getByRole('button', { name: 'Salva corsa' }));
-  await waitFor(() => expect(engine.rows<RunLog>('run_logs')[0]).toMatchObject({ type: 'test', distanceKm: 5, durationS: 1660, source: 'manual', date: '2026-11-20' }));
+  await waitFor(() => expect(engine.rows<RunLog>('run_logs')[0]).toMatchObject({ type: 'corsa', distanceKm: 5, durationS: 1660, source: 'manual', date: '2026-11-20' }));
 });
 
 test('un tempo scritto male non si salva', async () => {

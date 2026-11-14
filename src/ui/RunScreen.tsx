@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { RunLog } from '../domain/types';
-import { nextRunSession } from '../domain/running';
+import { nextRun } from '../domain/runPlan';
 import { formatNumber, formatPace, formatTime, parseDuration } from '../domain/format';
 import { parseKg } from '../domain/progression';
 import { todayLocal } from '../domain/dates';
@@ -11,10 +11,10 @@ const TYPE_LABEL: Record<RunLog['type'], string> = { test: 'Test', ripetute: 'Ri
 export function RunScreen({ today = todayLocal() }: { today?: string }) {
   const engine = useEngine();
   const runs = useRows<RunLog>('run_logs');
-  const session = nextRunSession(runs, today);
+  const next = nextRun(runs, today);
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(today);
-  const [distance, setDistance] = useState(session.distanceKm != null ? String(session.distanceKm) : '');
+  const [distance, setDistance] = useState(String(next.distanceKm));
   const [time, setTime] = useState('');
   const [error, setError] = useState('');
 
@@ -24,7 +24,7 @@ export function RunScreen({ today = todayLocal() }: { today?: string }) {
     if (km == null || km <= 0) { setError('Scrivi la distanza in km, per esempio 5 o 7,5'); return; }
     if (s == null || s <= 0) { setError('Scrivi il tempo come 27:40'); return; }
     const row: Omit<RunLog, 'updatedAt'> = {
-      id: crypto.randomUUID(), date, type: session.type, distanceKm: km, durationS: s, source: 'manual', externalId: null,
+      id: crypto.randomUUID(), date, type: 'corsa', distanceKm: km, durationS: s, source: 'manual', externalId: null,
     };
     void engine.write('run_logs', row);
     setOpen(false); setTime(''); setError('');
@@ -36,8 +36,7 @@ export function RunScreen({ today = todayLocal() }: { today?: string }) {
     <section className="stack">
       <div className="card stack">
         <p className="muted eyebrow">Prossima corsa</p>
-        <h2>{session.title}</h2>
-        <ol className="steps">{session.steps.map((s) => <li key={s}>{s}</li>)}</ol>
+        <h2>{next.text}</h2>
         {!open && <button className="btn" onClick={() => setOpen(true)}>Ho fatto questa corsa</button>}
         {open && (
           <div className="stack">
