@@ -2,14 +2,15 @@ import { useState } from 'react';
 import type { Exercise, GymDay, SetLog } from '../domain/types';
 import { WEEKS_PER_CYCLE } from '../domain/types';
 import { DAY_LABELS } from '../domain/program';
-import { useEngine, useProfile, useRows } from '../data/store';
-import { ExerciseCard } from './ExerciseCard';
+import { useEngine, useProfile, useProfileReady, useRows } from '../data/store';
+import { ExerciseCard, type SetPatch } from './ExerciseCard';
 
 const DAYS: GymDay[] = ['push', 'pull', 'legs', 'upper'];
 
 export function WorkoutScreen({ onRun }: { onRun: () => void }) {
   const engine = useEngine();
   const profile = useProfile();
+  const ready = useProfileReady();
   const exercises = useRows<Exercise>('exercises');
   const logs = useRows<SetLog>('set_logs');
   const [day, setDay] = useState<GymDay>('push');
@@ -18,9 +19,17 @@ export function WorkoutScreen({ onRun }: { onRun: () => void }) {
 
   const setWeek = (w: number, c = cycle) => {
     setAskNewCycle(false);
+    if (!ready) return; // prima del primo scaricamento si cancellerebbe il profilo online
     void engine.write('profile', { ...profile, currentCycle: c, currentWeek: w });
   };
   const next = () => (week >= WEEKS_PER_CYCLE ? setAskNewCycle(true) : setWeek(week + 1));
+
+  // Unisce la modifica alla riga salvata più recente: un campo non sovrascrive mai l'altro.
+  const save = (ex: Exercise, patch: SetPatch) => {
+    const stored = engine.rows<SetLog>('set_logs').find((l) => l.day === ex.day && l.exerciseId === ex.id && l.cycle === cycle && l.week === week);
+    const base = { day: ex.day, exerciseId: ex.id, cycle, week, kg: stored?.kg ?? null, reps: stored?.reps ?? '' };
+    void engine.write('set_logs', { ...base, ...patch });
+  };
 
   const list = exercises.filter((e) => e.day === day && e.active).sort((a, b) => a.position - b.position);
 
@@ -36,9 +45,9 @@ export function WorkoutScreen({ onRun }: { onRun: () => void }) {
       </div>
 
       <div className="weekbar">
-        <button aria-label="Settimana precedente" disabled={week <= 1} onClick={() => setWeek(week - 1)}>‹</button>
+        <button aria-label="Settimana precedente" disabled={!ready || week <= 1} onClick={() => setWeek(week - 1)}>‹</button>
         <div className="weeklabel">Settimana {week}<span>di {WEEKS_PER_CYCLE}{cycle > 1 ? ` · ciclo ${cycle}` : ''}</span></div>
-        <button aria-label="Settimana successiva" onClick={next}>›</button>
+        <button aria-label="Settimana successiva" disabled={!ready} onClick={next}>›</button>
       </div>
 
       {askNewCycle && (
@@ -56,7 +65,7 @@ export function WorkoutScreen({ onRun }: { onRun: () => void }) {
       <div className="stack">
         {list.map((ex) => (
           <ExerciseCard key={`${ex.day}-${ex.id}-${cycle}-${week}`} ex={ex} logs={logs} cycle={cycle} week={week}
-            onSave={(kg, reps) => void engine.write('set_logs', { day: ex.day, exerciseId: ex.id, cycle, week, kg, reps })} />
+            onSave={(patch) => save(ex, patch)} />
         ))}
       </div>
 

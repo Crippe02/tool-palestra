@@ -1,4 +1,4 @@
-import { screen, within, waitFor } from '@testing-library/react';
+import { screen, within, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithEngine } from './testUtils';
 import { WorkoutScreen } from './WorkoutScreen';
@@ -35,6 +35,18 @@ test('dopo la settimana 24 si inizia un nuovo ciclo', async () => {
   expect(screen.getByText(/Inizia un nuovo ciclo/)).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: /Inizia il ciclo 2/ }));
   await waitFor(() => expect(engine.rows<Profile>('profile')[0]).toMatchObject({ currentCycle: 2, currentWeek: 1 }));
+});
+
+test('un carico arrivato dopo l\'apertura non viene cancellato scrivendo le ripetizioni', async () => {
+  const { engine } = await renderWithEngine(<WorkoutScreen onRun={() => {}} />);
+  await act(() => engine.write('set_logs', { day: 'push', exerciseId: 'inc', cycle: 1, week: 1, kg: 50, reps: '' }));
+  const c = card('Panca inclinata manubri');
+  expect(within(c).getByLabelText('Carico (kg)')).toHaveValue('50');
+  await userEvent.type(within(c).getByLabelText('Ripetizioni'), '8,8,8');
+  await waitFor(() => {
+    const log = engine.rows<SetLog>('set_logs').find((l) => l.exerciseId === 'inc' && l.day === 'push')!;
+    expect(log).toMatchObject({ kg: 50, reps: '8,8,8' });
+  });
 });
 
 test('il quinto giorno porta alla corsa', async () => {

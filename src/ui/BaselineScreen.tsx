@@ -3,7 +3,7 @@ import type { Baseline } from '../domain/types';
 import { parseKg } from '../domain/progression';
 import { formatNumber } from '../domain/format';
 import { todayLocal } from '../domain/dates';
-import { useEngine, useProfile } from '../data/store';
+import { useEngine, useProfile, useProfileReady } from '../data/store';
 
 const FIELDS = [
   ['weightKg', 'Peso (kg)'], ['waistCm', 'Vita (cm)'], ['chestCm', 'Petto (cm)'], ['armCm', 'Braccio (cm)'], ['thighCm', 'Coscia (cm)'],
@@ -13,6 +13,7 @@ type Field = (typeof FIELDS)[number][0];
 export function BaselineScreen() {
   const engine = useEngine();
   const profile = useProfile();
+  const ready = useProfileReady();
   const b = profile.baseline;
   const [date, setDate] = useState(b?.date ?? todayLocal());
   const [values, setValues] = useState<Record<Field, string>>(() =>
@@ -40,7 +41,8 @@ export function BaselineScreen() {
           </label>
         ))}
       </div>
-      <button className="btn" onClick={save}>Salva punto di partenza</button>
+      <button className="btn" disabled={!ready} onClick={save}>Salva punto di partenza</button>
+      {!ready && <p className="muted">Aspetta che i dati siano scaricati.</p>}
       {msg && <p className="up">{msg}</p>}
     </section>
   );

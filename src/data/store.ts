@@ -27,3 +27,9 @@ export function useProfile(): import('../domain/types').Profile {
   const rows = useRows<import('../domain/types').Profile>('profile');
   return rows[0] ?? DEFAULT_PROFILE;
 }
+
+/** false finché il profilo non è stato scaricato: prima di allora scriverlo cancellerebbe quello online. */
+export function useProfileReady(): boolean {
+  const engine = useEngine();
+  return useSyncExternalStore((cb) => engine.onChange(cb), () => engine.isReady('profile'));
+}

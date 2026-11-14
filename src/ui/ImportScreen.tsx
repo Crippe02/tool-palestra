@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { SetLog } from '../domain/types';
 import { ImportError, mergeImport, parseOldScheda } from '../domain/importScheda';
-import { useEngine, useProfile, useRows } from '../data/store';
+import { useEngine, useProfile, useProfileReady, useRows } from '../data/store';
 
 export function ImportScreen() {
   const engine = useEngine();
   const profile = useProfile();
+  const ready = useProfileReady();
   const existing = useRows<SetLog>('set_logs');
   const [text, setText] = useState('');
   const [done, setDone] = useState('');
@@ -37,7 +38,8 @@ export function ImportScreen() {
       {parsed && (
         <>
           <p>Voci trovate: {parsed.logs.length} · settimana {parsed.week}</p>
-          <button className="btn" onClick={() => void doImport()}>Importa</button>
+          <button className="btn" disabled={!ready} onClick={() => void doImport()}>Importa</button>
+          {!ready && <p className="muted">Aspetta che i dati siano scaricati.</p>}
         </>
       )}
       {done && <p className="up">{done}</p>}

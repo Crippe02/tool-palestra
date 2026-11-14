@@ -81,15 +81,17 @@ test('pull sostituisce una riga locale più vecchia', async () => {
   expect((await local.all<SetLog>('set_logs'))[0].kg).toBe(75);
 });
 
-test('una modifica fatta durante l\'invio resta in coda', async () => {
+test('una modifica fatta durante l\'invio viene inviata subito dopo', async () => {
   const { remote, engine } = await setup(true);
   remote.offline = true;
   await engine.write('set_logs', log(1, 50));
   remote.offline = false;
   const realUpsert = remote.upsert.bind(remote);
-  remote.upsert = async (t, rows) => { await engine.write('set_logs', log(1, 55)); return realUpsert(t, rows); };
+  let once = true;
+  remote.upsert = async (t, rows) => { if (once) { once = false; await engine.write('set_logs', log(1, 55)); } return realUpsert(t, rows); };
   await engine.flush();
-  expect(await engine.pendingCount()).toBe(1);
+  expect(await engine.pendingCount()).toBe(0);
+  expect(remote.rows('set_logs')[0]).toMatchObject({ kg: 55 });
 });
 
 test('conversione verso e da Supabase', () => {
@@ -99,4 +101,40 @@ test('conversione verso e da Supabase', () => {
   expect(back).toEqual(log(3, 52.5));
   const profile = fromRemote('profile', { user_id: 'u1', id: 'me', current_cycle: 1, current_week: 4, baseline: { weightKg: 82 }, updated_at: '2026-11-01T00:00:00+00:00' });
   expect(profile).toEqual({ id: 'me', currentCycle: 1, currentWeek: 4, baseline: { weightKg: 82 }, updatedAt: '2026-11-01T00:00:00.000Z' });
+});
+
+const pause = () => new Promise((r) => setTimeout(r, 5));
+
+test('una riga inviata in ritardo da un altro dispositivo arriva comunque', async () => {
+  const remote = new FakeRemote();
+  let phoneOnline = false;
+  const phone = new SyncEngine(await LocalStore.open(dbName()), remote, () => phoneOnline);
+  const laptop = new SyncEngine(await LocalStore.open(dbName()), remote, () => true);
+  await phone.init(); await laptop.init();
+  await phone.write('set_logs', log(1, 50));          // scritto offline sul telefono
+  await pause();
+  await laptop.write('set_logs', log(2, 52.5));       // il laptop scrive dopo
+  await laptop.flush();
+  await laptop.pull();                                 // il cursore del laptop avanza
+  phoneOnline = true;
+  await phone.flush();                                 // il telefono invia la riga vecchia
+  await laptop.pull();
+  expect(laptop.rows<SetLog>('set_logs').map((l) => l.week).sort()).toEqual([1, 2]);
+});
+
+test('pull dice quali tabelle sono arrivate', async () => {
+  const { remote, engine } = await setup(true);
+  remote.failPull = true;
+  const r = await engine.sync();
+  expect(r.pulled.size).toBe(0);
+  remote.failPull = false;
+  expect((await engine.sync()).pulled.has('profile')).toBe(true);
+});
+
+test('il profilo è pronto solo dopo averlo scaricato', async () => {
+  const { remote, engine } = await setup(true);
+  remote.seed('profile', [{ id: 'me', currentCycle: 1, currentWeek: 7, baseline: null, updatedAt: '2026-11-01T00:00:00.000Z' }]);
+  expect(engine.isReady('profile')).toBe(false);
+  await engine.pull();
+  expect(engine.isReady('profile')).toBe(true);
 });

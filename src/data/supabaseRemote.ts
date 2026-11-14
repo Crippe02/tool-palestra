@@ -10,6 +10,8 @@ const CONFLICT: Record<TableName, string> = {
   profile: 'user_id',
 };
 
+const PAGE = 1000; // il limite di righe predefinito di Supabase
+
 /** Colonne numeric: PostgREST può restituirle come stringhe. */
 const NUMERIC = new Set(['kg', 'startKg', 'weightKg', 'waistCm', 'chestCm', 'armCm', 'thighCm', 'distanceKm', 'durationS']);
 
@@ -26,25 +28,48 @@ export function fromRemote(_table: TableName, row: Record<string, unknown>): Rec
   for (const [k, v] of Object.entries(row)) {
     if (k === 'user_id') continue;
     const key = camel(k);
-    if (key === 'updatedAt') out[key] = new Date(String(v)).toISOString();
+    if (key === 'updatedAt' || key === 'syncedAt') out[key] = new Date(String(v)).toISOString();
     else if (NUMERIC.has(key) && v != null) out[key] = Number(v);
     else out[key] = v;
   }
   return out;
 }
 
+/** Scarica pagina dopo pagina finché una pagina non torna più corta. */
+export async function fetchAllPages<T>(fetchPage: (from: number, to: number) => Promise<T[]>, pageSize = PAGE): Promise<T[]> {
+  const all: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const page = await fetchPage(from, from + pageSize - 1);
+    all.push(...page);
+    if (page.length < pageSize) return all;
+  }
+}
+
+/** Senza sessione valida le richieste andrebbero come anonimo e la RLS restituirebbe zero righe: meglio fallire. */
+async function requireSession(client: SupabaseClient) {
+  const { data } = await client.auth.getSession();
+  if (!data.session) throw new Error('Sessione non disponibile');
+}
+
 export function createSupabaseRemote(client: SupabaseClient): Remote {
   return {
     async upsert(table, rows) {
+      await requireSession(client);
       const { error } = await client.from(table).upsert(rows.map((r) => toRemote(table, r)), { onConflict: CONFLICT[table] });
       if (error) throw error;
     },
     async pullSince(table, sinceIso) {
-      let q = client.from(table).select('*').order('updated_at');
-      if (sinceIso) q = q.gt('updated_at', sinceIso);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []).map((r) => fromRemote(table, r as Record<string, unknown>));
+      await requireSession(client);
+      const keys = CONFLICT[table].split(',').filter((c) => c !== 'user_id');
+      const rows = await fetchAllPages(async (from, to) => {
+        let q = client.from(table).select('*').order('synced_at');
+        for (const k of keys) q = q.order(k);
+        if (sinceIso) q = q.gte('synced_at', sinceIso);
+        const { data, error } = await q.range(from, to);
+        if (error) throw error;
+        return (data ?? []) as Record<string, unknown>[];
+      });
+      return rows.map((r) => fromRemote(table, r));
     },
   };
 }

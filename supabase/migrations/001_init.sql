@@ -1,4 +1,12 @@
 -- Tool Palestra: schema iniziale. Ogni riga appartiene a un utente; RLS su tutte le tabelle.
+-- updated_at = ora del dispositivo che ha scritto (serve a decidere quale versione vince);
+-- synced_at  = ora in cui il SERVER ha ricevuto la riga (cursore del pull, la imposta il trigger).
+
+create function public.set_synced_at() returns trigger language plpgsql as $$
+begin
+  new.synced_at := now();
+  return new;
+end $$;
 
 create table public.exercises (
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
@@ -14,6 +22,7 @@ create table public.exercises (
   active boolean not null default true,
   is_new boolean not null default false,
   updated_at timestamptz not null,
+  synced_at timestamptz not null default now(),
   primary key (user_id, day, id)
 );
 
@@ -26,6 +35,7 @@ create table public.set_logs (
   kg numeric,
   reps text not null default '',
   updated_at timestamptz not null,
+  synced_at timestamptz not null default now(),
   primary key (user_id, day, exercise_id, cycle, week)
 );
 
@@ -38,6 +48,7 @@ create table public.body_logs (
   arm_cm numeric,
   thigh_cm numeric,
   updated_at timestamptz not null,
+  synced_at timestamptz not null default now(),
   primary key (user_id, date)
 );
 
@@ -51,6 +62,7 @@ create table public.run_logs (
   source text not null check (source in ('manual','strava')),
   external_id text,
   updated_at timestamptz not null,
+  synced_at timestamptz not null default now(),
   primary key (user_id, id)
 );
 
@@ -60,7 +72,8 @@ create table public.profile (
   current_cycle int not null default 1,
   current_week int not null default 1,
   baseline jsonb,
-  updated_at timestamptz not null
+  updated_at timestamptz not null,
+  synced_at timestamptz not null default now()
 );
 
 do $$
@@ -69,7 +82,8 @@ begin
   foreach t in array array['exercises','set_logs','body_logs','run_logs','profile'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('create policy "solo i miei dati" on public.%I for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid())', t);
-    execute format('create index %I on public.%I (updated_at)', t || '_updated_at_idx', t);
+    execute format('create index %I on public.%I (synced_at)', t || '_synced_at_idx', t);
+    execute format('create trigger %I before insert or update on public.%I for each row execute function public.set_synced_at()', t || '_synced_at', t);
     execute format('grant select, insert, update, delete on public.%I to authenticated', t);
   end loop;
 end $$;
