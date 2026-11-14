@@ -21,12 +21,17 @@ export function readCallback(search: string, expectedState: string | null): { co
   return { code: p.get('code')! };
 }
 
+export interface SyncResult { imported: number; more: boolean; connected: boolean }
+
 export interface StravaApi {
   status(): Promise<{ connected: boolean }>;
   connect(code: string): Promise<void>;
-  sync(): Promise<{ imported: number; more: boolean }>;
+  /** Scarica le corse nuove. connected: false se Strava non è collegato (o va ricollegato). */
+  sync(): Promise<SyncResult>;
   disconnect(): Promise<void>;
 }
+
+const COOLDOWN_MS = 30_000;
 
 export function createStravaApi(client: SupabaseClient): StravaApi {
   const call = async <T>(body: Record<string, unknown>): Promise<T> => {
@@ -34,11 +39,33 @@ export function createStravaApi(client: SupabaseClient): StravaApi {
     if (error) throw error;
     return data as T;
   };
+
+  // Una sola sync alla volta, e niente nuove chiamate a Strava per 30 secondi dopo una riuscita
+  // (apertura dell'app e sezione Corsa partono quasi insieme).
+  let inFlight: Promise<SyncResult> | null = null;
+  let lastOk = 0;
+  const doSync = async (): Promise<SyncResult> => {
+    try {
+      const r = await call<{ imported: number; more: boolean }>({ action: 'sync' });
+      lastOk = Date.now();
+      return { ...r, connected: true };
+    } catch (e) {
+      const status = (e as { context?: { status?: number } }).context?.status;
+      if (status === 409) return { imported: 0, more: false, connected: false };
+      throw e;
+    }
+  };
+
   return {
     status: () => call({ action: 'status' }),
-    connect: async (code) => { await call({ action: 'connect', code }); },
-    sync: () => call({ action: 'sync' }),
-    disconnect: async () => { await call({ action: 'disconnect' }); },
+    connect: async (code) => { await call({ action: 'connect', code }); lastOk = 0; },
+    sync: () => {
+      if (inFlight) return inFlight;
+      if (Date.now() - lastOk < COOLDOWN_MS) return Promise.resolve({ imported: 0, more: false, connected: true });
+      inFlight = doSync().finally(() => { inFlight = null; });
+      return inFlight;
+    },
+    disconnect: async () => { await call({ action: 'disconnect' }); lastOk = 0; },
   };
 }
 

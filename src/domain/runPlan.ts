@@ -10,6 +10,8 @@ const FASTER_S = 15;
 const BREAK_DAYS = 21;
 const BREAK_BACK_KM = 1;
 const BREAK_BACK_S = 30;
+/** Sotto mezzo km la corsa non conta (tapis roulant senza sensore, GPS spento): darebbe passi assurdi. */
+const MIN_KM = 0.5;
 
 const when = (r: RunLog) => r.startTime ?? `${r.date}T00:00:00.000Z`;
 
@@ -17,7 +19,7 @@ const when = (r: RunLog) => r.startTime ?? `${r.date}T00:00:00.000Z`;
 export function visibleRuns(runs: RunLog[]): RunLog[] {
   const stravaDays = new Set(runs.filter((r) => r.source === 'strava' && !r.hidden).map((r) => r.date));
   return runs
-    .filter((r) => !r.hidden && !(r.source === 'manual' && stravaDays.has(r.date)))
+    .filter((r) => !r.hidden && r.distanceKm >= MIN_KM && !(r.source === 'manual' && stravaDays.has(r.date)))
     .sort((a, b) => when(a).localeCompare(when(b)));
 }
 

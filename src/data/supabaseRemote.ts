@@ -25,8 +25,11 @@ const snake = (k: string) => SPECIAL[k] ?? k.replace(/[A-Z]/g, (c) => `_${c.toLo
 const camel = (k: string) => SPECIAL_BACK[k] ?? k.replace(/_([a-z])/g, (_m, c: string) => c.toUpperCase());
 
 /** Conversione superficiale: il contenuto di baseline (jsonb) resta com'è. */
-export function toRemote(_table: TableName, row: object): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(row).map(([k, v]) => [snake(k), v]));
+export function toRemote(table: TableName, row: object): Record<string, unknown> {
+  const out = Object.fromEntries(Object.entries(row).map(([k, v]) => [snake(k), v]));
+  // In un invio con più righe, una chiave mancante diventa NULL: hidden è NOT NULL e bloccherebbe la coda.
+  if (table === 'run_logs' && out.hidden == null) out.hidden = false;
+  return out;
 }
 
 export function fromRemote(_table: TableName, row: Record<string, unknown>): Record<string, unknown> {

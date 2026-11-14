@@ -23,11 +23,10 @@ function useStravaState(): [StravaState, () => Promise<void>] {
     let alive = true;
     (async () => {
       try {
-        const { connected } = await strava.status();
+        setState('syncing');
+        const { connected } = await strava.sync();
         if (!alive) return;
         if (!connected) { setState('off'); return; }
-        setState('syncing');
-        await strava.sync();
         await engine.pull();
         if (alive) setState('on');
       } catch {
@@ -59,7 +58,7 @@ function StravaBox({ clientId }: { clientId: string | null }) {
     <p className="muted small strava-line">
       {state === 'syncing' && 'Aggiorno da Strava…'}
       {state === 'on' && <>Strava collegato · <button className="link" onClick={() => void disconnect()}>Scollega</button></>}
-      {state === 'error' && 'Non riesco a sentire Strava, riprovo dopo.'}
+      {state === 'error' && <>Non riesco a sentire Strava, riprovo dopo. · <button className="link" onClick={() => void disconnect()}>Scollega</button></>}
     </p>
   );
 }
@@ -69,7 +68,9 @@ export function RunScreen({ today = todayLocal(), clientId = stravaClientId }: {
   const runs = useRows<RunLog>('run_logs');
   const visible = visibleRuns(runs);
   const next = nextRun(runs, today);
-  const toRate = [...visible].reverse().find((r) => !r.feeling);
+  // Si chiede solo dell'ultima corsa: non di tutto lo storico importato.
+  const latest = visible[visible.length - 1];
+  const toRate = latest && !latest.feeling ? latest : undefined;
   const recent = [...visible].reverse().slice(0, 8);
 
   const [open, setOpen] = useState(false);

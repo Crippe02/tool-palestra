@@ -7,7 +7,8 @@ import { createSupabaseRemote } from './data/supabaseRemote';
 import { seedIfEmpty } from './data/seed';
 import { SyncContext } from './data/store';
 import { authView, forgetUser, getRememberedUser, rememberUser } from './data/authGate';
-import { createStravaApi, readCallback, StravaContext, takeSavedState, type StravaApi } from './data/strava';
+import { createStravaApi, StravaContext, takeSavedState, type StravaApi } from './data/strava';
+import { processStravaReturn } from './data/stravaBoot';
 import { Login } from './ui/Login';
 import { Shell } from './ui/Shell';
 import { Screens } from './ui/Screens';
@@ -77,41 +78,37 @@ function Header() {
   return <h1>Tool Palestra</h1>;
 }
 
-const STRAVA_ERRORS: Record<string, string> = {
-  denied: 'Collegamento a Strava annullato.',
-  state: 'Collegamento a Strava non riuscito: riprova dal pulsante "Collega Strava".',
-  scope: 'Per leggere le corse serve autorizzare "Visualizza i dati delle tue attività". Riprova e lascia la casella spuntata.',
-  failed: 'Collegamento a Strava non riuscito: riprova tra poco.',
-};
-
-/** Ritorno da Strava dopo "Collega Strava", e aggiornamento delle corse all'apertura. */
+/**
+ * Ritorno da Strava dopo "Collega Strava", e aggiornamento delle corse all'apertura.
+ * Finché il collegamento non è finito l'app non mostra le schermate: altrimenti la sezione Corsa
+ * chiederebbe lo stato a Strava prima del collegamento e direbbe "non collegato".
+ */
 function useStravaBoot(engine: SyncEngine | null, strava: StravaApi) {
   const [notice, setNotice] = useState<string | null>(null);
   const [fromCallback] = useState(() => /[?&](code|error)=/.test(location.search));
+  const [connecting, setConnecting] = useState(fromCallback);
   useEffect(() => {
     if (!engine) return;
     (async () => {
       if (fromCallback) {
-        const res = readCallback(location.search, takeSavedState());
+        const search = location.search;
         history.replaceState(null, '', location.pathname);
-        if (res && 'error' in res) { setNotice(STRAVA_ERRORS[res.error]); return; }
-        if (res) {
-          try { await strava.connect(res.code); setNotice('Strava collegato: arrivano le corse degli ultimi 3 mesi.'); }
-          catch { setNotice(STRAVA_ERRORS.failed); return; }
-        }
+        setNotice(await processStravaReturn(search, takeSavedState(), strava));
+        setConnecting(false);
       }
       if (!navigator.onLine) return;
-      try { await strava.sync(); await engine.pull(); } catch { /* non collegato o Strava non raggiungibile: si riprova dopo */ }
+      try { const r = await strava.sync(); if (r.connected) await engine.pull(); } catch { /* Strava non raggiungibile: si riprova dopo */ }
     })();
   }, [engine, strava, fromCallback]);
-  return { notice, fromCallback };
+  return { notice, fromCallback, connecting };
 }
 
 function Authenticated({ client }: { client: SupabaseClient }) {
   const engine = useEngine(client);
   const [strava] = useState(() => createStravaApi(client));
-  const { notice, fromCallback } = useStravaBoot(engine, strava);
+  const { notice, fromCallback, connecting } = useStravaBoot(engine, strava);
   if (!engine) return <div className="wrap"><Header /><p className="muted">Carico i dati…</p></div>;
+  if (connecting) return <div className="wrap"><Header /><p className="muted">Collego Strava…</p></div>;
   return (
     <SyncContext.Provider value={engine}>
       <StravaContext.Provider value={strava}>

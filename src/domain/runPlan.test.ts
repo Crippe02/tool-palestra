@@ -70,3 +70,7 @@ test('tempo sui 10 km', () => {
   expect(tenKTimeS(r('2026-11-01', 10.2, 3672))).toBe(3600);
   expect(tenKTimeS(r('2026-11-01', 8, 3000))).toBeNull();
 });
+
+test('corse quasi a zero km (tapis roulant senza sensore) non contano', () => {
+  expect(visibleRuns([r('2026-11-01', 0.2, 1800), r('2026-11-02', 5, 1800)]).map((x) => x.distanceKm)).toEqual([5]);
+});

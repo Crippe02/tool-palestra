@@ -147,3 +147,8 @@ test('conversione delle colonne Strava di run_logs', () => {
   });
   expect(r).toMatchObject({ distanceKm: 5.01, best5kS: 1660, best10kS: null, feeling: 'giusta', hidden: false, startTime: '2026-11-10T07:00:00.000Z' });
 });
+
+test('le corse vecchie senza hidden partono con hidden false (non bloccano l\'invio)', () => {
+  expect(toRemote('run_logs', { id: 'm1', date: '2026-10-01', type: 'test', distanceKm: 5, durationS: 1800, source: 'manual', externalId: null, updatedAt: 'x' })).toMatchObject({ hidden: false });
+  expect(toRemote('run_logs', { id: 'm2', hidden: true })).toMatchObject({ hidden: true });
+});

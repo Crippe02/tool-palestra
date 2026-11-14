@@ -66,7 +66,16 @@ Deno.serve(async (req) => {
         let t = await load();
         if (!t) return reply({ error: 'not_connected' }, 409);
         const nowS = Math.floor(Date.now() / 1000);
-        const fresh = await freshTokens(fetch, t, clientId, secret, nowS);
+        const forget = async () => {
+          await admin.from('strava_tokens').delete().eq('user_id', userId);
+          return reply({ error: 'not_connected' }, 409);
+        };
+        let fresh: Tokens;
+        try { fresh = await freshTokens(fetch, t, clientId, secret, nowS); }
+        catch (e) {
+          if (e instanceof Error && e.message === 'strava_reauth') return await forget();
+          throw e;
+        }
         if (fresh !== t) { await save(fresh); t = fresh; }
 
         const { data: known, error: knownError } = await admin.from('run_logs')
@@ -75,11 +84,18 @@ Deno.serve(async (req) => {
         const existing = new Map((known ?? []).map((r) => [r.id as string, { distanceKm: Number(r.distance_km), durationS: Number(r.duration_s) }]));
 
         const res = await syncRuns({ f: fetch, existing, t, nowS, nowIso: new Date().toISOString() });
+        if (res.reauth) return await forget();
         if (res.rows.length > 0) {
           const { error } = await admin.from('run_logs').upsert(res.rows.map((r) => ({ ...r, user_id: userId })), { onConflict: 'user_id,id' });
           if (error) throw new Error('db_runs_write');
         }
-        if (res.lastActivityAt !== t.lastActivityAt) await save({ ...t, lastActivityAt: res.lastActivityAt });
+        if (res.lastActivityAt !== t.lastActivityAt) {
+          // Solo il punto di sync: i token li ha già salvati il rinnovo, e una chiamata parallela
+          // potrebbe averli appena ruotati (non vanno riscritti con una copia vecchia).
+          const { error } = await admin.from('strava_tokens')
+            .update({ last_activity_at: res.lastActivityAt, updated_at: new Date().toISOString() }).eq('user_id', userId);
+          if (error) throw new Error('db_tokens_write');
+        }
         return reply({ imported: res.rows.length, more: res.more });
       }
 

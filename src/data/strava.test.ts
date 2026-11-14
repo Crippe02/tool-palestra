@@ -24,7 +24,27 @@ test('le chiamate passano dalla funzione strava e gli errori diventano eccezioni
   const invoke = vi.fn(async (_name: string, opts: { body: { action: string } }) =>
     opts.body.action === 'sync' ? { data: { imported: 2, more: false }, error: null } : { data: null, error: new Error('boom') });
   const api = createStravaApi({ functions: { invoke } } as unknown as SupabaseClient);
-  expect(await api.sync()).toEqual({ imported: 2, more: false });
+  expect(await api.sync()).toEqual({ imported: 2, more: false, connected: true });
   expect(invoke).toHaveBeenCalledWith('strava', { body: { action: 'sync' } });
   await expect(api.status()).rejects.toThrow();
+});
+
+function invokeWith(result: () => { data: unknown; error: unknown }) {
+  const invoke = vi.fn(async () => result());
+  return { invoke, api: createStravaApi({ functions: { invoke } } as unknown as SupabaseClient) };
+}
+
+test('sync dice se si è collegati: 409 dalla funzione = non collegato', async () => {
+  const off = invokeWith(() => ({ data: null, error: Object.assign(new Error('409'), { context: new Response('{}', { status: 409 }) }) }));
+  expect(await off.api.sync()).toEqual({ imported: 0, more: false, connected: false });
+  const on = invokeWith(() => ({ data: { imported: 1, more: false }, error: null }));
+  expect(await on.api.sync()).toEqual({ imported: 1, more: false, connected: true });
+});
+
+test('due sync insieme fanno una sola chiamata, e subito dopo non si richiama Strava', async () => {
+  const { invoke, api } = invokeWith(() => ({ data: { imported: 0, more: false }, error: null }));
+  await Promise.all([api.sync(), api.sync()]);
+  expect(invoke).toHaveBeenCalledTimes(1);
+  await api.sync();
+  expect(invoke).toHaveBeenCalledTimes(1);
 });

@@ -10,7 +10,7 @@ function fakeStrava(over: Partial<StravaApi> = {}): StravaApi & { sync: ReturnTy
   return {
     status: vi.fn(async () => ({ connected: false })),
     connect: vi.fn(async () => {}),
-    sync: vi.fn(async () => ({ imported: 0, more: false })),
+    sync: vi.fn(async () => ({ imported: 0, more: false, connected: false })),
     disconnect: vi.fn(async () => {}),
     ...over,
   } as StravaApi & { sync: ReturnType<typeof vi.fn> };
@@ -28,17 +28,18 @@ test('senza corse e senza Strava: 5 km e pulsante per collegare', async () => {
 });
 
 test('collegato: aggiorna da Strava all\'apertura', async () => {
-  const strava = fakeStrava({ status: vi.fn(async () => ({ connected: true })) });
+  const strava = fakeStrava({ sync: vi.fn(async () => ({ imported: 0, more: false, connected: true })) });
   await renderWithEngine(<RunScreen today="2026-11-20" clientId="123" />, { strava });
   await waitFor(() => expect(strava.sync).toHaveBeenCalled());
   expect(await screen.findByText(/Strava collegato/)).toBeInTheDocument();
 });
 
 test('Strava non raggiungibile: avviso e suggerimento ancora visibile', async () => {
-  const strava = fakeStrava({ status: vi.fn(async () => ({ connected: true })), sync: vi.fn(async () => { throw new Error('offline'); }) });
+  const strava = fakeStrava({ sync: vi.fn(async () => { throw new Error('offline'); }) });
   await renderWithEngine(<RunScreen today="2026-11-20" clientId="123" />, { strava });
   expect(await screen.findByText(/Non riesco a sentire Strava/)).toBeInTheDocument();
   expect(screen.getByText(/5 km, passo tranquillo/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Scollega' })).toBeInTheDocument();
 });
 
 test('com\'è andata: il tocco salva il feeling', async () => {
@@ -46,6 +47,13 @@ test('com\'è andata: il tocco salva il feeling', async () => {
   expect(screen.getByText(/com'è andata/i)).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'giusta' }));
   await waitFor(() => expect(engine.rows<RunLog>('run_logs')[0].feeling).toBe('giusta'));
+  expect(screen.queryByText(/com'è andata/i)).toBeNull();
+});
+
+test("com'è andata chiede solo dell'ultima corsa", async () => {
+  await renderWithEngine(<RunScreen today="2026-11-14" clientId="123" />, {
+    rows: { run_logs: [corsa('2026-11-05', 5.0, 1800), corsa('2026-11-12', 5.5, 1990, { feeling: 'facile' })] },
+  });
   expect(screen.queryByText(/com'è andata/i)).toBeNull();
 });
 

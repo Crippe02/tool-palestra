@@ -60,6 +60,8 @@ async function tokenRequest(f: Fetch, params: Record<string, string>) {
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params).toString(),
   });
+  // 400/401: autorizzazione revocata o refresh token non più valido → va ricollegato.
+  if (res.status === 400 || res.status === 401) throw new Error('strava_reauth');
   if (!res.ok) throw new Error(`strava_token_${res.status}`);
   return (await res.json()) as { access_token: string; refresh_token: string; expires_at: number; athlete?: { id: number } };
 }
@@ -81,7 +83,7 @@ const later = (a: string | null, b: string | null) => (!a ? b : !b ? a : Date.pa
 
 export async function syncRuns(deps: {
   f: Fetch; existing: Map<string, { distanceKm: number; durationS: number }>; t: Tokens; nowS: number; nowIso: string; maxDetails?: number;
-}): Promise<{ rows: RunRow[]; lastActivityAt: string | null; more: boolean }> {
+}): Promise<{ rows: RunRow[]; lastActivityAt: string | null; more: boolean; reauth?: boolean }> {
   const { f, existing, t, nowS, nowIso, maxDetails = 40 } = deps;
   const auth = { headers: { authorization: `Bearer ${t.accessToken}` } };
   const after = Math.floor(syncAfter(t.lastActivityAt, nowS));
@@ -89,6 +91,7 @@ export async function syncRuns(deps: {
   const all: StravaActivity[] = [];
   for (let page = 1; ; page++) {
     const res = await f(`${API}/athlete/activities?after=${after}&per_page=100&page=${page}`, auth);
+    if (res.status === 401) return { rows: [], lastActivityAt: t.lastActivityAt, more: false, reauth: true };
     if (!res.ok) return { rows: [], lastActivityAt: t.lastActivityAt, more: true };
     const list = (await res.json()) as StravaActivity[];
     all.push(...list);
@@ -106,6 +109,8 @@ export async function syncRuns(deps: {
       if (details >= maxDetails) return { rows, lastActivityAt, more: true };
       const res = await f(`${API}/activities/${a.id}`, auth);
       details++;
+      // Attività cancellata o resa privata nel frattempo: si salta. Limiti ed errori del server: ci si ferma e si riprova.
+      if (res.status === 404 || res.status === 403) { lastActivityAt = later(lastActivityAt, a.start_date); continue; }
       if (!res.ok) return { rows, lastActivityAt, more: true };
       rows.push(toRunRow(a, (await res.json()) as StravaDetail, nowIso));
     }
