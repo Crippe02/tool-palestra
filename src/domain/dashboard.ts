@@ -1,5 +1,6 @@
 import type { Baseline, BodyLog, Exercise, RunLog, SetLog } from './types';
-import { formatNumber, formatPercent, formatSigned, formatTime, formatTimeDiff } from './format';
+import { formatNumber, formatPace, formatPercent, formatSigned, formatTime, formatTimeDiff } from './format';
+import { tenKTimeS, visibleRuns } from './runPlan';
 
 export interface DashboardRow {
   key: string;
@@ -63,18 +64,33 @@ function strengthRows(exercises: Exercise[], logs: SetLog[]): DashboardRow[] {
   return rows;
 }
 
-function runRows(runs: RunLog[]): DashboardRow[] {
-  const tests = runs.filter((r) => r.type === 'test').sort((a, b) => a.date.localeCompare(b.date));
-  const distances = [...new Set(tests.map((t) => t.distanceKm))].sort((a, b) => a - b);
+const paceS = (r: RunLog) => Math.round(r.durationS / r.distanceKm);
+const km1 = (n: number) => `${formatNumber(n, 1, 1)} km`;
+
+/** Riga di un "migliore" (tempo più basso): dal primo valore al migliore; con un solo valore è "nuovo". */
+function bestTimeRow(key: string, label: string, values: number[]): DashboardRow | null {
+  if (values.length === 0) return null;
+  const best = Math.min(...values);
+  if (values.length === 1) return { key, section: 'corsa', label, from: '—', to: formatTime(best), change: 'nuovo', good: null };
+  const first = values[0];
+  return { key, section: 'corsa', label, from: formatTime(first), to: formatTime(best), change: formatTimeDiff(best - first), good: better(first, best, true) };
+}
+
+function runRows(all: RunLog[]): DashboardRow[] {
+  const runs = visibleRuns(all);
+  if (runs.length === 0) return [];
   const rows: DashboardRow[] = [];
-  for (const d of distances) {
-    const same = tests.filter((t) => t.distanceKm === d);
-    if (same.length < 2) continue;
-    const first = same[0];
-    const last = same[same.length - 1];
-    rows.push({ key: `corsa:${d}`, section: 'corsa', label: `${formatNumber(d)} km`, from: formatTime(first.durationS), to: formatTime(last.durationS),
-      change: formatTimeDiff(last.durationS - first.durationS), good: better(first.durationS, last.durationS, true) });
-  }
+  const first = runs[0];
+  const last = runs[runs.length - 1];
+  const longest = Math.max(...runs.map((r) => r.distanceKm));
+  rows.push({ key: 'corsa:distanza', section: 'corsa', label: 'Distanza più lunga', from: km1(first.distanceKm), to: km1(longest),
+    change: formatSigned(Math.round((longest - first.distanceKm) * 10) / 10, 'km'), good: better(first.distanceKm, longest, false) });
+  const r5 = bestTimeRow('corsa:5k', 'Migliori 5 km', runs.map((r) => r.best5kS).filter((v): v is number => v != null));
+  const r10 = bestTimeRow('corsa:10k', 'Migliori 10 km', runs.map(tenKTimeS).filter((v): v is number => v != null));
+  if (r5) rows.push(r5);
+  if (r10) rows.push(r10);
+  rows.push({ key: 'corsa:passo', section: 'corsa', label: 'Passo medio', from: formatPace(paceS(first)), to: formatPace(paceS(last)),
+    change: `${formatTimeDiff(paceS(last) - paceS(first))}/km`, good: better(paceS(first), paceS(last), true) });
   return rows;
 }
 
@@ -106,9 +122,13 @@ export function seriesFor(key: string, i: DashboardInput): SeriesPoint[] {
     return ex?.startKg != null ? [{ x: 'inizio', y: ex.startKg }, ...points] : points;
   }
   if (section === 'corsa') {
-    const d = Number(a);
-    return i.runLogs.filter((r) => r.type === 'test' && r.distanceKm === d).sort((x, y) => x.date.localeCompare(y.date))
-      .map((r) => ({ x: r.date, y: r.durationS }));
+    const runs = visibleRuns(i.runLogs);
+    const pick: Record<string, (r: RunLog) => number | null | undefined> = {
+      distanza: (r) => r.distanceKm, '5k': (r) => r.best5kS, '10k': tenKTimeS, passo: paceS,
+    };
+    const f = pick[a];
+    if (!f) return [];
+    return runs.flatMap((r) => { const y = f(r); return y == null ? [] : [{ x: r.date, y }]; });
   }
   return [];
 }

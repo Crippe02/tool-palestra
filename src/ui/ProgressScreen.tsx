@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { BodyLog, Exercise, RunLog, SetLog } from '../domain/types';
 import { WEEKS_PER_CYCLE } from '../domain/types';
 import { buildDashboard, seriesFor, type DashboardRow } from '../domain/dashboard';
-import { formatNumber, formatTime } from '../domain/format';
+import { formatNumber, formatPace, formatTime } from '../domain/format';
 import { useProfile, useRows } from '../data/store';
 import { HistoryChart } from './HistoryChart';
 
@@ -11,6 +11,8 @@ const SECTIONS: { id: DashboardRow['section']; title: string }[] = [
 ];
 
 function formatterFor(key: string): (y: number) => string {
+  if (key === 'corsa:distanza') return (y) => `${formatNumber(y, 1)} km`;
+  if (key === 'corsa:passo') return formatPace;
   if (key.startsWith('corsa:')) return formatTime;
   if (key === 'corpo:weightKg' || key.startsWith('forza:')) return (y) => `${formatNumber(y, 2)} kg`;
   return (y) => `${formatNumber(y)} cm`;

@@ -9,8 +9,8 @@ const body = (date: string, weightKg: number | null, waistCm: number | null = nu
 const ex = (id: string, kind: Exercise['kind'], startKg: number | null): Exercise =>
   ({ day: 'push', id, name: id === 'inc' ? 'Panca inclinata manubri' : 'Alzate laterali', sets: 3, repMin: 6, repMax: 8, startKg, kind, position: 0, active: true, isNew: false, updatedAt: T });
 const set = (id: string, week: number, kg: number): SetLog => ({ day: 'push', exerciseId: id, cycle: 1, week, kg, reps: '', updatedAt: T });
-const run = (date: string, distanceKm: number, durationS: number, type: RunLog['type'] = 'test'): RunLog =>
-  ({ id: date + distanceKm, date, type, distanceKm, durationS, source: 'manual', externalId: null, updatedAt: T });
+const run = (date: string, distanceKm: number, durationS: number, extra: Partial<RunLog> = {}): RunLog =>
+  ({ id: date + distanceKm, date, type: 'corsa', distanceKm, durationS, source: 'strava', externalId: null, updatedAt: T, ...extra });
 const empty = { baseline, bodyLogs: [] as BodyLog[], setLogs: [] as SetLog[], exercises: [] as Exercise[], runLogs: [] as RunLog[] };
 
 test('formati italiani', () => {
@@ -38,14 +38,23 @@ test('forza: solo multiarticolari con carico iniziale', () => {
   expect(forza[0]).toMatchObject({ label: 'Panca inclinata manubri', from: '50 kg', to: '56 kg', change: '+12%', good: true });
 });
 
-test('corsa: confronta il primo e l\'ultimo test della stessa distanza', () => {
-  const rows = buildDashboard({ ...empty, runLogs: [run('2026-10-01', 5, 1810), run('2026-11-10', 5, 1660)] });
-  expect(rows.find((r) => r.section === 'corsa')).toMatchObject({ label: '5 km', from: '30:10', to: '27:40', change: '−2:30', good: true });
+test('corsa: distanza più lunga, migliori 5 km e passo medio', () => {
+  const rows = buildDashboard({ ...empty, runLogs: [run('2026-10-01', 5.0, 1810, { best5kS: 1810 }), run('2026-11-10', 8.2, 2952, { best5kS: 1660 })] });
+  const by = (label: string) => rows.find((r) => r.section === 'corsa' && r.label === label);
+  expect(by('Distanza più lunga')).toMatchObject({ from: '5,0 km', to: '8,2 km', change: '+3,2 km', good: true });
+  expect(by('Migliori 5 km')).toMatchObject({ from: '30:10', to: '27:40', change: '−2:30', good: true });
+  expect(by('Passo medio')).toMatchObject({ from: '6:02/km', to: '6:00/km', change: '−0:02/km', good: true });
+  expect(by('Migliori 10 km')).toBeUndefined();
 });
 
-test('corsa: mai 5 km contro 10 km', () => {
+test('corsa: il primo 10 km compare come nuovo', () => {
   const rows = buildDashboard({ ...empty, runLogs: [run('2026-10-01', 5, 1810), run('2026-11-10', 10, 3600)] });
-  expect(rows.filter((r) => r.section === 'corsa')).toHaveLength(0);
+  expect(rows.find((r) => r.label === 'Migliori 10 km')).toMatchObject({ from: '—', to: '1:00:00', change: 'nuovo', good: null });
+});
+
+test('corsa: le corse nascoste non contano', () => {
+  const rows = buildDashboard({ ...empty, runLogs: [run('2026-10-01', 5, 1810), run('2026-11-10', 15, 4000, { hidden: true })] });
+  expect(rows.find((r) => r.label === 'Distanza più lunga')).toMatchObject({ to: '5,0 km' });
 });
 
 test('serie storica di una riga: dal punto di partenza a oggi', () => {
@@ -55,8 +64,9 @@ test('serie storica di una riga: dal punto di partenza a oggi', () => {
   expect(seriesFor(peso.key, input)).toEqual([
     { x: '2026-11-01', y: 82 }, { x: '2026-11-05', y: 80.5 }, { x: '2026-11-12', y: 79.4 },
   ]);
-  const runs = { ...empty, runLogs: [run('2026-10-01', 5, 1810), run('2026-11-10', 5, 1660)] };
-  expect(seriesFor('corsa:5', runs)).toEqual([{ x: '2026-10-01', y: 1810 }, { x: '2026-11-10', y: 1660 }]);
+  const runs = { ...empty, runLogs: [run('2026-11-10', 6, 2100), run('2026-10-01', 5, 1810)] };
+  expect(seriesFor('corsa:distanza', runs)).toEqual([{ x: '2026-10-01', y: 5 }, { x: '2026-11-10', y: 6 }]);
+  expect(seriesFor('corsa:passo', runs)).toEqual([{ x: '2026-10-01', y: 362 }, { x: '2026-11-10', y: 350 }]);
 });
 
 test('righe senza un valore di oggi non compaiono', () => {
