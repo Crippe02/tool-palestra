@@ -86,7 +86,7 @@ function Header() {
 function useStravaBoot(engine: SyncEngine | null, strava: StravaApi | null) {
   const [notice, setNotice] = useState<string | null>(null);
   const [fromCallback] = useState(() => /[?&](code|error)=/.test(location.search));
-  const [connecting, setConnecting] = useState(fromCallback);
+  const [connecting, setConnecting] = useState(fromCallback && strava != null);
   useEffect(() => {
     if (!engine || !strava) return; // Strava spento: nessuna chiamata
     (async () => {
