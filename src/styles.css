@@ -24,3 +24,11 @@ input,textarea,select{font:600 1rem var(--body);padding:9px 10px;border:1px soli
 label{display:flex;flex-direction:column;gap:3px;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .up{color:var(--up)} .down{color:var(--down)}
+.stack{display:flex;flex-direction:column;gap:10px}
+.sync-badge{align-self:flex-end;font-size:.75rem;padding:3px 10px;border-radius:999px;background:var(--field);color:var(--muted);border:1px solid var(--line)}
+.sync-badge.warn{color:var(--down);border-color:var(--down)}
+.install-hint{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.install-hint p{margin:0;font-size:.88rem}
+.tabbar{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabbar button{border:0;background:none;color:var(--muted);font-family:var(--display);font-weight:600;font-size:1rem;text-transform:uppercase;letter-spacing:.04em;padding:14px 0}
+.tabbar button[aria-current="page"]{color:var(--accent)}
