@@ -12,14 +12,17 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'altro', label: 'Altro' },
 ];
 
-export function Shell({ screens }: { screens: (tab: Tab, go: (t: Tab) => void) => ReactNode }) {
-  const [tab, setTab] = useState<Tab>('oggi');
+export function Shell({ screens, initialTab = 'oggi', banner }: {
+  screens: (tab: Tab, go: (t: Tab) => void) => ReactNode; initialTab?: Tab; banner?: ReactNode;
+}) {
+  const [tab, setTab] = useState<Tab>(initialTab);
   const status = useSyncStatus();
   return (
     <>
       <div className="wrap">
         <SyncBadge pending={status.pending} online={status.online} />
         <InstallHint />
+        {banner}
         {screens(tab, setTab)}
       </div>
       <nav className="tabbar" aria-label="Sezioni">
