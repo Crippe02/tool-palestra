@@ -1,5 +1,5 @@
 import type { Baseline, BodyLog, Exercise, RunLog, SetLog } from './types';
-import { buildDashboard } from './dashboard';
+import { buildDashboard, seriesFor } from './dashboard';
 import { formatPercent, formatTime, parseDuration, formatPace } from './format';
 
 const T = '2026-11-13T00:00:00.000Z';
@@ -46,6 +46,17 @@ test('corsa: confronta il primo e l\'ultimo test della stessa distanza', () => {
 test('corsa: mai 5 km contro 10 km', () => {
   const rows = buildDashboard({ ...empty, runLogs: [run('2026-10-01', 5, 1810), run('2026-11-10', 10, 3600)] });
   expect(rows.filter((r) => r.section === 'corsa')).toHaveLength(0);
+});
+
+test('serie storica di una riga: dal punto di partenza a oggi', () => {
+  const input = { ...empty, bodyLogs: [body('2026-11-12', 79.4), body('2026-11-05', 80.5)] };
+  const peso = buildDashboard(input).find((r) => r.label === 'Peso')!;
+  expect(peso.key).toBe('corpo:weightKg');
+  expect(seriesFor(peso.key, input)).toEqual([
+    { x: '2026-11-01', y: 82 }, { x: '2026-11-05', y: 80.5 }, { x: '2026-11-12', y: 79.4 },
+  ]);
+  const runs = { ...empty, runLogs: [run('2026-10-01', 5, 1810), run('2026-11-10', 5, 1660)] };
+  expect(seriesFor('corsa:5', runs)).toEqual([{ x: '2026-10-01', y: 1810 }, { x: '2026-11-10', y: 1660 }]);
 });
 
 test('righe senza un valore di oggi non compaiono', () => {

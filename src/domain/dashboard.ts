@@ -2,6 +2,7 @@ import type { Baseline, BodyLog, Exercise, RunLog, SetLog } from './types';
 import { formatNumber, formatPercent, formatSigned, formatTime, formatTimeDiff } from './format';
 
 export interface DashboardRow {
+  key: string;
   section: 'corpo' | 'forza' | 'corsa';
   label: string;
   from: string;
@@ -35,10 +36,10 @@ function bodyRows(baseline: Baseline | null, logs: BodyLog[]): DashboardRow[] {
     const to = [...byDate].reverse().find((l) => l[field] != null)?.[field];
     if (from == null || to == null) continue;
     if (field === 'weightKg') {
-      rows.push({ section: 'corpo', label, from: `${formatNumber(from, 1, 1)} kg`, to: `${formatNumber(to, 1, 1)} kg`,
+      rows.push({ key: `corpo:${field}`, section: 'corpo', label, from: `${formatNumber(from, 1, 1)} kg`, to: `${formatNumber(to, 1, 1)} kg`,
         change: formatPercent(((to - from) / from) * 100), good: better(from, to, lowerIsBetter) });
     } else {
-      rows.push({ section: 'corpo', label, from: `${formatNumber(from)} cm`, to: `${formatNumber(to)} cm`,
+      rows.push({ key: `corpo:${field}`, section: 'corpo', label, from: `${formatNumber(from)} cm`, to: `${formatNumber(to)} cm`,
         change: formatSigned(Math.round((to - from) * 10) / 10, 'cm'), good: field === 'waistCm' ? better(from, to, true) : null });
     }
   }
@@ -56,7 +57,7 @@ function strengthRows(exercises: Exercise[], logs: SetLog[]): DashboardRow[] {
     if (!last) continue;
     const from = ex.startKg!;
     const to = last.kg!;
-    rows.push({ section: 'forza', label: ex.name, from: `${formatNumber(from, 2)} kg`, to: `${formatNumber(to, 2)} kg`,
+    rows.push({ key: `forza:${ex.day}:${ex.id}`, section: 'forza', label: ex.name, from: `${formatNumber(from, 2)} kg`, to: `${formatNumber(to, 2)} kg`,
       change: formatPercent(((to - from) / from) * 100), good: better(from, to, false) });
   }
   return rows;
@@ -71,7 +72,7 @@ function runRows(runs: RunLog[]): DashboardRow[] {
     if (same.length < 2) continue;
     const first = same[0];
     const last = same[same.length - 1];
-    rows.push({ section: 'corsa', label: `${formatNumber(d)} km`, from: formatTime(first.durationS), to: formatTime(last.durationS),
+    rows.push({ key: `corsa:${d}`, section: 'corsa', label: `${formatNumber(d)} km`, from: formatTime(first.durationS), to: formatTime(last.durationS),
       change: formatTimeDiff(last.durationS - first.durationS), good: better(first.durationS, last.durationS, true) });
   }
   return rows;
@@ -81,4 +82,33 @@ export function buildDashboard(i: {
   baseline: Baseline | null; bodyLogs: BodyLog[]; setLogs: SetLog[]; exercises: Exercise[]; runLogs: RunLog[];
 }): DashboardRow[] {
   return [...bodyRows(i.baseline, i.bodyLogs), ...strengthRows(i.exercises, i.setLogs), ...runRows(i.runLogs)];
+}
+
+export interface SeriesPoint { x: string; y: number }
+
+type DashboardInput = Parameters<typeof buildDashboard>[0];
+
+/** Valori nel tempo di una riga del cruscotto (per il grafico). */
+export function seriesFor(key: string, i: DashboardInput): SeriesPoint[] {
+  const [section, a, b] = key.split(':');
+  if (section === 'corpo') {
+    const field = a as BodyField;
+    const start = i.baseline?.[field];
+    const points = [...i.bodyLogs].filter((l) => l[field] != null).sort((x, y) => x.date.localeCompare(y.date))
+      .map((l) => ({ x: l.date, y: l[field]! }));
+    return start != null && i.baseline ? [{ x: i.baseline.date, y: start }, ...points] : points;
+  }
+  if (section === 'forza') {
+    const ex = i.exercises.find((e) => e.day === a && e.id === b);
+    const points = i.setLogs.filter((l) => l.day === a && l.exerciseId === b && l.kg != null)
+      .sort((x, y) => x.cycle - y.cycle || x.week - y.week)
+      .map((l) => ({ x: l.cycle > 1 ? `C${l.cycle} S${l.week}` : `S${l.week}`, y: l.kg! }));
+    return ex?.startKg != null ? [{ x: 'inizio', y: ex.startKg }, ...points] : points;
+  }
+  if (section === 'corsa') {
+    const d = Number(a);
+    return i.runLogs.filter((r) => r.type === 'test' && r.distanceKm === d).sort((x, y) => x.date.localeCompare(y.date))
+      .map((r) => ({ x: r.date, y: r.durationS }));
+  }
+  return [];
 }

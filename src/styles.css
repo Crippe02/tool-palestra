@@ -59,3 +59,14 @@ label{display:flex;flex-direction:column;gap:3px;font-size:.72rem;text-transform
 fieldset.ex-edit{margin:0;min-width:0}
 .row-actions{display:flex;gap:6px;flex-wrap:wrap}
 ul.plain{list-style:none;margin:0;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:.88rem}
+.eyebrow{margin:0;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}
+.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.small{font-size:.8rem}
+.progress-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.dash-row{width:100%;display:grid;grid-template-columns:1fr auto;gap:2px 12px;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:10px 0;color:var(--fg)}
+.dash-label{font-weight:600}
+.dash-values{grid-column:1;color:var(--muted);font-size:.85rem;font-variant-numeric:tabular-nums}
+.dash-change{grid-column:2;grid-row:1/3;align-self:center;font-family:var(--display);font-weight:700;font-size:1.2rem;font-variant-numeric:tabular-nums}
+.chart{margin:4px 0 8px}
+.chart svg{width:100%;height:auto;display:block}
+.chart-axis{display:flex;justify-content:space-between;font-size:.75rem;color:var(--muted)}

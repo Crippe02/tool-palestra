@@ -1,9 +1,14 @@
 import type { Tab } from './Shell';
 import { WorkoutScreen } from './WorkoutScreen';
 import { OtherScreen } from './OtherScreen';
+import { RunScreen } from './RunScreen';
+import { ProgressScreen } from './ProgressScreen';
 
 export function Screens({ tab, go }: { tab: Tab; go: (t: Tab) => void }) {
-  if (tab === 'oggi') return <WorkoutScreen onRun={() => go('corsa')} />;
-  if (tab === 'altro') return <OtherScreen />;
-  return <p className="muted">Sezione “{tab}” in arrivo.</p>;
+  switch (tab) {
+    case 'oggi': return <WorkoutScreen onRun={() => go('corsa')} />;
+    case 'corsa': return <RunScreen />;
+    case 'progressi': return <ProgressScreen onSetup={() => go('altro')} />;
+    case 'altro': return <OtherScreen />;
+  }
 }
