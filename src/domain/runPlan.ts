@@ -30,6 +30,13 @@ export function tenKTimeS(r: RunLog): number | null {
   return null;
 }
 
+/** Tempo sui 5 km: quello indicato (o il best effort), altrimenti il tempo totale se la corsa è di circa 5 km. */
+export function fiveKTimeS(r: RunLog): number | null {
+  if (r.best5kS != null) return r.best5kS;
+  if (r.distanceKm >= 4.9 && r.distanceKm <= 5.5) return Math.round((r.durationS * 5) / r.distanceKm);
+  return null;
+}
+
 export interface NextRun {
   phase: 1 | 2;
   distanceKm: number;

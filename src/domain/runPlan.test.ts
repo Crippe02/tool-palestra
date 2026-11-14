@@ -1,5 +1,5 @@
 import type { Feeling, RunLog } from './types';
-import { nextRun, visibleRuns, tenKTimeS } from './runPlan';
+import { nextRun, visibleRuns, tenKTimeS, fiveKTimeS } from './runPlan';
 
 const r = (date: string, km: number, timeS: number, extra: Partial<RunLog> & { feeling?: Feeling | null } = {}): RunLog => ({
   id: `strava-${date}-${km}`, date, type: 'corsa', distanceKm: km, durationS: timeS, source: 'strava', externalId: null,
@@ -73,4 +73,10 @@ test('tempo sui 10 km', () => {
 
 test('corse quasi a zero km (tapis roulant senza sensore) non contano', () => {
   expect(visibleRuns([r('2026-11-01', 0.2, 1800), r('2026-11-02', 5, 1800)]).map((x) => x.distanceKm)).toEqual([5]);
+});
+
+test('tempo sui 5 km: best effort, oppure corsa di circa 5 km', () => {
+  expect(fiveKTimeS(r('2026-11-01', 8, 2900, { best5kS: 1780 }))).toBe(1780);
+  expect(fiveKTimeS(r('2026-11-01', 5.2, 1820))).toBe(1750);
+  expect(fiveKTimeS(r('2026-11-01', 8, 2900))).toBeNull();
 });

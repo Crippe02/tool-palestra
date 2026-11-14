@@ -1,6 +1,6 @@
 import type { Baseline, BodyLog, Exercise, RunLog, SetLog } from './types';
 import { formatNumber, formatPace, formatPercent, formatSigned, formatTime, formatTimeDiff } from './format';
-import { tenKTimeS, visibleRuns } from './runPlan';
+import { fiveKTimeS, tenKTimeS, visibleRuns } from './runPlan';
 
 export interface DashboardRow {
   key: string;
@@ -85,7 +85,7 @@ function runRows(all: RunLog[]): DashboardRow[] {
   const longest = Math.max(...runs.map((r) => r.distanceKm));
   rows.push({ key: 'corsa:distanza', section: 'corsa', label: 'Distanza più lunga', from: km1(first.distanceKm), to: km1(longest),
     change: formatSigned(Math.round((longest - first.distanceKm) * 10) / 10, 'km'), good: better(first.distanceKm, longest, false) });
-  const r5 = bestTimeRow('corsa:5k', 'Migliori 5 km', runs.map((r) => r.best5kS).filter((v): v is number => v != null));
+  const r5 = bestTimeRow('corsa:5k', 'Migliori 5 km', runs.map(fiveKTimeS).filter((v): v is number => v != null));
   const r10 = bestTimeRow('corsa:10k', 'Migliori 10 km', runs.map(tenKTimeS).filter((v): v is number => v != null));
   if (r5) rows.push(r5);
   if (r10) rows.push(r10);
@@ -124,7 +124,7 @@ export function seriesFor(key: string, i: DashboardInput): SeriesPoint[] {
   if (section === 'corsa') {
     const runs = visibleRuns(i.runLogs);
     const pick: Record<string, (r: RunLog) => number | null | undefined> = {
-      distanza: (r) => r.distanceKm, '5k': (r) => r.best5kS, '10k': tenKTimeS, passo: paceS,
+      distanza: (r) => r.distanceKm, '5k': fiveKTimeS, '10k': tenKTimeS, passo: paceS,
     };
     const f = pick[a];
     if (!f) return [];

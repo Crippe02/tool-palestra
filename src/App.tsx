@@ -7,7 +7,7 @@ import { createSupabaseRemote } from './data/supabaseRemote';
 import { seedIfEmpty } from './data/seed';
 import { SyncContext } from './data/store';
 import { authView, forgetUser, getRememberedUser, rememberUser } from './data/authGate';
-import { createStravaApi, StravaContext, takeSavedState, type StravaApi } from './data/strava';
+import { createStravaApi, StravaContext, stravaClientId, takeSavedState, type StravaApi } from './data/strava';
 import { processStravaReturn } from './data/stravaBoot';
 import { Login } from './ui/Login';
 import { Shell } from './ui/Shell';
@@ -83,12 +83,12 @@ function Header() {
  * Finché il collegamento non è finito l'app non mostra le schermate: altrimenti la sezione Corsa
  * chiederebbe lo stato a Strava prima del collegamento e direbbe "non collegato".
  */
-function useStravaBoot(engine: SyncEngine | null, strava: StravaApi) {
+function useStravaBoot(engine: SyncEngine | null, strava: StravaApi | null) {
   const [notice, setNotice] = useState<string | null>(null);
   const [fromCallback] = useState(() => /[?&](code|error)=/.test(location.search));
   const [connecting, setConnecting] = useState(fromCallback);
   useEffect(() => {
-    if (!engine) return;
+    if (!engine || !strava) return; // Strava spento: nessuna chiamata
     (async () => {
       if (fromCallback) {
         const search = location.search;
@@ -105,7 +105,7 @@ function useStravaBoot(engine: SyncEngine | null, strava: StravaApi) {
 
 function Authenticated({ client }: { client: SupabaseClient }) {
   const engine = useEngine(client);
-  const [strava] = useState(() => createStravaApi(client));
+  const [strava] = useState(() => (stravaClientId ? createStravaApi(client) : null));
   const { notice, fromCallback, connecting } = useStravaBoot(engine, strava);
   if (!engine) return <div className="wrap"><Header /><p className="muted">Carico i dati…</p></div>;
   if (connecting) return <div className="wrap"><Header /><p className="muted">Collego Strava…</p></div>;

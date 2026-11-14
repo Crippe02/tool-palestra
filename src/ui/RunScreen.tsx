@@ -42,14 +42,99 @@ function useStravaState(): [StravaState, () => Promise<void>] {
   return [state, disconnect];
 }
 
-function StravaBox({ clientId }: { clientId: string | null }) {
+type Step = 'km' | 'tempo' | 'feeling' | '5k' | 'fatto';
+
+/** "Ho corso": domande una alla volta, poi la corsa è salvata. */
+function RunWizard({ suggestedKm, today, onClose, nextText }: { suggestedKm: number; today: string; onClose: () => void; nextText: string }) {
+  const engine = useEngine();
+  const [step, setStep] = useState<Step>('km');
+  const [date, setDate] = useState(today);
+  const [km, setKm] = useState(formatNumber(suggestedKm));
+  const [time, setTime] = useState('');
+  const [feeling, setFeeling] = useState<Feeling | null>(null);
+  const [five, setFive] = useState('');
+  const [error, setError] = useState('');
+
+  const kmN = parseKg(km);
+  const timeS = parseDuration(time);
+  const go = (s: Step) => { setError(''); setStep(s); };
+
+  const save = (fiveS: number | null, f: Feeling) => {
+    const row: Omit<RunLog, 'updatedAt'> = {
+      id: crypto.randomUUID(), date, type: 'corsa', distanceKm: kmN!, durationS: timeS!, source: 'manual', externalId: null,
+      startTime: null, feeling: f, best5kS: fiveS, best10kS: null, hidden: false,
+    };
+    void engine.write('run_logs', row);
+    go('fatto');
+  };
+
+  const afterKm = () => (kmN == null || kmN <= 0 ? setError('Scrivi i km, per esempio 5 o 7,5') : go('tempo'));
+  const afterTime = () => (timeS == null || timeS <= 0 ? setError('Scrivi il tempo come 27:40') : go('feeling'));
+  const afterFeeling = (f: Feeling) => { setFeeling(f); if (kmN! >= 5) go('5k'); else save(null, f); };
+  const afterFive = () => {
+    const s = parseDuration(five);
+    if (s == null || s <= 0) { setError('Scrivi il tempo come 27:40, oppure tocca Salta'); return; }
+    if (s >= timeS!) { setError('Il tempo ai 5 km deve essere minore del tempo totale'); return; }
+    save(s, feeling!);
+  };
+
+  const n = kmN != null && kmN >= 5 ? 4 : 3;
+  return (
+    <div className="card stack wizard">
+      {step === 'km' && (
+        <>
+          <p className="muted eyebrow">1/{n}</p>
+          <label>Quanti km hai fatto?<input inputMode="decimal" autoFocus value={km} onChange={(e) => setKm(e.target.value)} /></label>
+          <label>Quando<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+        </>
+      )}
+      {step === 'tempo' && (
+        <>
+          <p className="muted eyebrow">2/{n}</p>
+          <label>In quanto tempo?<input inputMode="numeric" autoFocus placeholder="27:40" value={time} onChange={(e) => setTime(e.target.value)} /></label>
+        </>
+      )}
+      {step === 'feeling' && (
+        <>
+          <p className="muted eyebrow">3/{n}</p>
+          <p className="question">Com'è andata?</p>
+          <div className="row-actions">
+            {FEELINGS.map((f) => <button key={f} className="btn secondary" onClick={() => afterFeeling(f)}>{f}</button>)}
+          </div>
+        </>
+      )}
+      {step === '5k' && (
+        <>
+          <p className="muted eyebrow">4/4</p>
+          <label>Tempo ai primi 5 km?<input inputMode="numeric" autoFocus placeholder="29:40" value={five} onChange={(e) => setFive(e.target.value)} /></label>
+          <p className="muted small">Lo trovi nell'app con cui registri la corsa. Se non lo sai, salta.</p>
+        </>
+      )}
+      {step === 'fatto' && <p className="question">Fatto! Prossima corsa: {nextText}</p>}
+
+      {error && <p className="down">{error}</p>}
+
+      <div className="row-actions">
+        {step === 'km' && <button className="btn" onClick={afterKm}>Avanti</button>}
+        {step === 'tempo' && <button className="btn" onClick={afterTime}>Avanti</button>}
+        {step === '5k' && <><button className="btn" onClick={afterFive}>Salva</button><button className="btn secondary" onClick={() => save(null, feeling!)}>Salta</button></>}
+        {step === 'tempo' && <button className="btn secondary" onClick={() => go('km')}>Indietro</button>}
+        {step === 'feeling' && <button className="btn secondary" onClick={() => go('tempo')}>Indietro</button>}
+        {step === '5k' && <button className="btn secondary" onClick={() => go('feeling')}>Indietro</button>}
+        <button className="btn secondary" onClick={onClose}>{step === 'fatto' ? 'Chiudi' : 'Annulla'}</button>
+      </div>
+    </div>
+  );
+}
+
+function StravaBox({ clientId }: { clientId: string }) {
   const [state, disconnect] = useStravaState();
   if (state === 'checking') return null;
   if (state === 'off') {
     return (
       <div className="card stack">
         <p>Collega Strava e le tue corse arriveranno da sole.</p>
-        <button className="btn" disabled={!clientId} onClick={() => clientId && startConnect(clientId)}>Collega Strava</button>
+        <button className="btn" onClick={() => startConnect(clientId)}>Collega Strava</button>
         <p className="muted small">Meglio farlo dal PC: si fa una volta sola.</p>
       </div>
     );
@@ -74,34 +159,21 @@ export function RunScreen({ today = todayLocal(), clientId = stravaClientId }: {
   const recent = [...visible].reverse().slice(0, 8);
 
   const [open, setOpen] = useState(false);
-  const [date, setDate] = useState(today);
-  const [distance, setDistance] = useState('');
-  const [time, setTime] = useState('');
-  const [error, setError] = useState('');
 
   const update = (r: RunLog, patch: Partial<RunLog>) => {
     const { updatedAt: _u, ...rest } = r;
     void engine.write('run_logs', { ...rest, ...patch });
   };
 
-  const save = () => {
-    const km = parseKg(distance);
-    const s = parseDuration(time);
-    if (km == null || km <= 0) { setError('Scrivi la distanza in km, per esempio 5 o 7,5'); return; }
-    if (s == null || s <= 0) { setError('Scrivi il tempo come 27:40'); return; }
-    const row: Omit<RunLog, 'updatedAt'> = {
-      id: crypto.randomUUID(), date, type: 'corsa', distanceKm: km, durationS: s, source: 'manual', externalId: null,
-      startTime: null, feeling: null, best5kS: null, best10kS: null, hidden: false,
-    };
-    void engine.write('run_logs', row);
-    setOpen(false); setTime(''); setDistance(''); setError('');
-  };
-
   return (
     <section className="stack">
-      <StravaBox clientId={clientId} />
+      {clientId && <StravaBox clientId={clientId} />}
 
-      {toRate && (
+      {open
+        ? <RunWizard suggestedKm={next.distanceKm} today={today} nextText={next.text} onClose={() => setOpen(false)} />
+        : <button className="btn big" onClick={() => setOpen(true)}>Ho corso</button>}
+
+      {toRate && !open && (
         <div className="card stack rate">
           <p>Corsa del {shortDate(toRate.date)}: {runText(toRate)} — com'è andata?</p>
           <div className="row-actions">
@@ -143,21 +215,6 @@ export function RunScreen({ today = todayLocal(), clientId = stravaClientId }: {
         </div>
       )}
 
-      {!open && <button className="btn secondary" onClick={() => { setOpen(true); setDistance(String(next.distanceKm)); }}>Aggiungi una corsa a mano</button>}
-      {open && (
-        <div className="card stack">
-          <div className="fields">
-            <label>Data<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-            <label>Distanza (km)<input inputMode="decimal" value={distance} onChange={(e) => setDistance(e.target.value)} /></label>
-            <label>Tempo<input inputMode="numeric" placeholder="27:40" value={time} onChange={(e) => setTime(e.target.value)} /></label>
-          </div>
-          {error && <p className="down">{error}</p>}
-          <div className="row-actions">
-            <button className="btn" onClick={save}>Salva corsa</button>
-            <button className="btn secondary" onClick={() => { setOpen(false); setError(''); }}>Annulla</button>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

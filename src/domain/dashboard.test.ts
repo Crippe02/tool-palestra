@@ -72,3 +72,8 @@ test('serie storica di una riga: dal punto di partenza a oggi', () => {
 test('righe senza un valore di oggi non compaiono', () => {
   expect(buildDashboard(empty)).toEqual([]);
 });
+
+test('corsa: i 5 km valgono anche da una corsa di circa 5 km senza best effort', () => {
+  const rows = buildDashboard({ ...empty, runLogs: [run('2026-10-01', 5.2, 1820), run('2026-11-10', 5.0, 1700)] });
+  expect(rows.find((r) => r.label === 'Migliori 5 km')).toMatchObject({ from: '29:10', to: '28:20', change: '−0:50' });
+});

@@ -65,24 +65,70 @@ test('nascondere una corsa la toglie dal suggerimento', async () => {
   expect(screen.getByText(/^5 km, passo tranquillo/)).toBeInTheDocument();
 });
 
-test('salva la corsa fatta', async () => {
+async function rispondi(km: string | null, tempo: string, feeling: string) {
+  await userEvent.click(screen.getByRole('button', { name: 'Ho corso' }));
+  if (km != null) {
+    const campo = screen.getByLabelText('Quanti km hai fatto?');
+    await userEvent.clear(campo);
+    await userEvent.type(campo, km);
+  }
+  await userEvent.click(screen.getByRole('button', { name: 'Avanti' }));
+  await userEvent.type(screen.getByLabelText('In quanto tempo?'), tempo);
+  await userEvent.click(screen.getByRole('button', { name: 'Avanti' }));
+  await userEvent.click(screen.getByRole('button', { name: feeling }));
+}
+
+test('ho corso: quattro domande e la corsa è salvata', async () => {
   const { engine } = await renderWithEngine(<RunScreen today="2026-11-20" />);
-  await userEvent.click(screen.getByRole('button', { name: 'Aggiungi una corsa a mano' }));
-  const dist = screen.getByLabelText('Distanza (km)');
-  await userEvent.clear(dist);
-  await userEvent.type(dist, '5');
-  await userEvent.type(screen.getByLabelText('Tempo'), '27:40');
-  await userEvent.click(screen.getByRole('button', { name: 'Salva corsa' }));
-  await waitFor(() => expect(engine.rows<RunLog>('run_logs')[0]).toMatchObject({ type: 'corsa', distanceKm: 5, durationS: 1660, source: 'manual', date: '2026-11-20' }));
+  await rispondi('6', '36:10', 'giusta');
+  await userEvent.type(screen.getByLabelText('Tempo ai primi 5 km?'), '29:40');
+  await userEvent.click(screen.getByRole('button', { name: 'Salva' }));
+  await waitFor(() => expect(engine.rows<RunLog>('run_logs')[0]).toMatchObject({
+    type: 'corsa', source: 'manual', date: '2026-11-20', distanceKm: 6, durationS: 2170, feeling: 'giusta', best5kS: 1780,
+  }));
+  expect(screen.getByText(/Fatto! Prossima corsa: 5,5 km/)).toBeInTheDocument();
 });
 
-test('un tempo scritto male non si salva', async () => {
+test('ho corso: il tempo ai 5 km si può saltare', async () => {
   const { engine } = await renderWithEngine(<RunScreen today="2026-11-20" />);
-  await userEvent.click(screen.getByRole('button', { name: 'Aggiungi una corsa a mano' }));
-  await userEvent.type(screen.getByLabelText('Tempo'), 'abc');
-  await userEvent.click(screen.getByRole('button', { name: 'Salva corsa' }));
+  await rispondi('6', '36:10', 'facile');
+  await userEvent.click(screen.getByRole('button', { name: 'Salta' }));
+  await waitFor(() => expect(engine.rows<RunLog>('run_logs')[0]).toMatchObject({ distanceKm: 6, best5kS: null, feeling: 'facile' }));
+});
+
+test('ho corso: sotto i 5 km niente domanda sui 5 km', async () => {
+  const { engine } = await renderWithEngine(<RunScreen today="2026-11-20" />);
+  await rispondi('4', '25:00', 'dura');
+  await waitFor(() => expect(engine.rows<RunLog>('run_logs')[0]).toMatchObject({ distanceKm: 4, durationS: 1500, feeling: 'dura' }));
+  expect(screen.queryByLabelText('Tempo ai primi 5 km?')).toBeNull();
+});
+
+test('ho corso: un tempo scritto male non va avanti', async () => {
+  const { engine } = await renderWithEngine(<RunScreen today="2026-11-20" />);
+  await userEvent.click(screen.getByRole('button', { name: 'Ho corso' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Avanti' }));
+  await userEvent.type(screen.getByLabelText('In quanto tempo?'), 'abc');
+  await userEvent.click(screen.getByRole('button', { name: 'Avanti' }));
   expect(screen.getByText('Scrivi il tempo come 27:40')).toBeInTheDocument();
+  expect(screen.getByLabelText('In quanto tempo?')).toBeInTheDocument();
   expect(engine.rows('run_logs')).toHaveLength(0);
+});
+
+test('ho corso: i 5 km non possono essere più lenti del totale', async () => {
+  const { engine } = await renderWithEngine(<RunScreen today="2026-11-20" />);
+  await rispondi('6', '36:10', 'giusta');
+  await userEvent.type(screen.getByLabelText('Tempo ai primi 5 km?'), '40:00');
+  await userEvent.click(screen.getByRole('button', { name: 'Salva' }));
+  expect(screen.getByText('Il tempo ai 5 km deve essere minore del tempo totale')).toBeInTheDocument();
+  expect(engine.rows('run_logs')).toHaveLength(0);
+});
+
+test('senza Strava configurato il riquadro Strava non compare', async () => {
+  const strava = fakeStrava();
+  await renderWithEngine(<RunScreen today="2026-11-20" clientId={null} />, { strava });
+  await new Promise((r) => setTimeout(r, 50));
+  expect(screen.queryByRole('button', { name: 'Collega Strava' })).toBeNull();
+  expect(strava.sync).not.toHaveBeenCalled();
 });
 
 test('i progressi mostrano il corpo rispetto al punto di partenza', async () => {
